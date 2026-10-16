@@ -1,0 +1,227 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Frankfurt Bot - Status</title>
+<style>
+  :root {
+    --ink: #16191d;
+    --muted: #5c6470;
+    --line: #e2e5ea;
+    --page: #f5f6f8;
+    --card: #ffffff;
+    --ok: #12703c;
+    --ok-soft: #e7f4ec;
+    --alert: #9a5b00;
+    --alert-soft: #fdf1de;
+    --error: #a32121;
+    --error-soft: #fbeaea;
+    --idle: #5c6470;
+    --idle-soft: #eef0f3;
+    --run: #1c4f9c;
+    --run-soft: #e8eefa;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 20px 16px 48px;
+    background: var(--page);
+    color: var(--ink);
+    font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto,
+      Helvetica, Arial, sans-serif;
+    -webkit-text-size-adjust: 100%;
+  }
+  main { max-width: 680px; margin: 0 auto; }
+  header h1 { margin: 0; font-size: 24px; letter-spacing: -0.01em; }
+  header p { margin: 4px 0 20px; color: var(--muted); font-size: 14px; }
+  .card {
+    background: var(--card);
+    border: 1px solid var(--line);
+    border-radius: 14px;
+    padding: 20px;
+    margin-bottom: 16px;
+  }
+  .status { border-left: 5px solid var(--idle); background: var(--idle-soft); }
+  .status.ok { border-left-color: var(--ok); background: var(--ok-soft); }
+  .status.alert { border-left-color: var(--alert); background: var(--alert-soft); }
+  .status.warning { border-left-color: var(--alert); background: var(--alert-soft); }
+  .status.error { border-left-color: var(--error); background: var(--error-soft); }
+  .status.running { border-left-color: var(--run); background: var(--run-soft); }
+  .pill {
+    display: inline-block;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    padding: 3px 10px;
+    border-radius: 999px;
+    background: var(--card);
+    border: 1px solid var(--line);
+    color: var(--muted);
+  }
+  .status.ok .pill { color: var(--ok); }
+  .status.alert .pill { color: var(--alert); }
+  .status.warning .pill { color: var(--alert); }
+  .status.error .pill { color: var(--error); }
+  .status.running .pill { color: var(--run); }
+  .status h2 { margin: 12px 0 6px; font-size: 19px; line-height: 1.3; }
+  .status p { margin: 0; color: var(--muted); font-size: 14px; }
+  .facts { padding: 6px 20px; }
+  .facts div {
+    display: flex;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 11px 0;
+    border-bottom: 1px solid var(--line);
+    font-size: 15px;
+  }
+  .facts div:last-child { border-bottom: 0; }
+  .facts .label { color: var(--muted); }
+  .facts .value { font-weight: 600; text-align: right; }
+  button {
+    width: 100%;
+    padding: 14px 18px;
+    font: inherit;
+    font-weight: 600;
+    color: #fff;
+    background: #1c1f23;
+    border: 0;
+    border-radius: 12px;
+    cursor: pointer;
+  }
+  button:disabled { opacity: 0.55; cursor: progress; }
+  .hint { margin: 10px 2px 0; color: var(--muted); font-size: 13px; }
+  h3 {
+    margin: 0 0 10px;
+    font-size: 13px;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  pre {
+    margin: 0;
+    padding: 14px;
+    background: #1c1f23;
+    color: #e8eaed;
+    border-radius: 10px;
+    font: 13px/1.5 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    white-space: pre-wrap;
+    word-break: break-word;
+    max-height: 260px;
+    overflow: auto;
+  }
+  footer { color: var(--muted); font-size: 13px; text-align: center; }
+  footer a { color: inherit; }
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>Frankfurt Bot</h1>
+    <p>Appointment availability monitor</p>
+  </header>
+
+  <section class="card status" id="status">
+    <span class="pill" id="pill">Loading</span>
+    <h2 id="headline">Reading bot status...</h2>
+    <p id="detail"></p>
+  </section>
+
+  <section class="card facts">
+    <div><span class="label">Last check</span>
+      <span class="value" id="last-check">-</span></div>
+    <div><span class="label">Result</span>
+      <span class="value" id="last-result">-</span></div>
+    <div><span class="label">Failed checks in a row</span>
+      <span class="value" id="failures">-</span></div>
+    <div><span class="label">Cloud schedule</span>
+      <span class="value" id="schedule">-</span></div>
+  </section>
+
+  <button id="run" type="button">Run check now</button>
+  <p class="hint" id="hint">
+    A check takes about 30 seconds: it opens the appointment page and
+    reads the calendar.
+  </p>
+
+  <section class="card" style="margin-top:16px">
+    <h3>Last check output</h3>
+    <pre id="output">No output yet.</pre>
+  </section>
+
+  <footer id="footer"></footer>
+</main>
+
+<script>
+const RESULT_LABELS = {
+  NO_SLOTS: "No appointments available",
+  CHECK_PAGE: "Calendar loaded, message missing",
+  FAILED: "Check failed",
+};
+const PHASE_PILLS = {
+  ok: "Healthy",
+  alert: "Appointment alert",
+  warning: "Attention",
+  error: "Failed",
+  running: "Checking",
+  unknown: "No data",
+};
+
+const el = (id) => document.getElementById(id);
+
+function when(iso) {
+  if (!iso) return "-";
+  const date = new Date(iso);
+  if (isNaN(date)) return iso;
+  return date.toLocaleString(undefined, {
+    day: "2-digit", month: "short", hour: "2-digit", minute: "2-digit",
+  });
+}
+
+function render(status) {
+  const card = el("status");
+  card.className = "card status " + status.phase;
+  el("pill").textContent = PHASE_PILLS[status.phase] || status.phase;
+  el("headline").textContent = status.headline;
+  el("detail").textContent = status.detail;
+
+  const facts = status.facts;
+  el("last-check").textContent = when(facts.last_check);
+  el("last-result").textContent =
+    RESULT_LABELS[facts.last_result] || "No result yet";
+  el("failures").textContent = facts.failures;
+  el("schedule").textContent = facts.schedule;
+
+  el("output").textContent = status.output || "No output yet.";
+  el("footer").innerHTML =
+    "State source: " + status.state_source + ".<br>" +
+    'Appointment page: <a href="' + status.checked_url + '" rel="noreferrer">' +
+    status.checked_url + "</a>";
+
+  el("run").disabled = status.running;
+  el("run").textContent = status.running ? "Checking..." : "Run check now";
+}
+
+async function refresh() {
+  try {
+    const response = await fetch("/api/status", { cache: "no-store" });
+    render(await response.json());
+  } catch (error) {
+    el("headline").textContent = "Cannot reach the dashboard server";
+    el("detail").textContent = String(error);
+  }
+}
+
+el("run").addEventListener("click", async () => {
+  el("run").disabled = true;
+  el("run").textContent = "Checking...";
+  await fetch("/api/check", { method: "POST" });
+  refresh();
+});
+
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>
