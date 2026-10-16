@@ -1,6 +1,6 @@
 {
   "initialized": false,
   "alert_sent": false,
-  "failures": 2,
-  "error_sent": false
+  "failures": 3,
+  "error_sent": true
 }
