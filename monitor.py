@@ -98,8 +98,7 @@ def main():
         result = check_calendar()
     except Exception as error:
         state["failures"] = state.get("failures", 0) + 1
-        print("CHECK FAILED:", type(error).__name__)
-
+        print("CHECK FAILED:", type(error).__name__, str(error))
         if (
             state["failures"] >= 3
             and not state.get("error_sent", False)
