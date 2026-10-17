@@ -67,7 +67,7 @@ def check_calendar():
                 timeout=60000,
             )
             if response and response.status >= 400:
-                raise RuntimeError("Website returned an HTTP error")
+                raise RuntimeError(f"Website returned HTTP {response.status}")
 
             page.wait_for_timeout(15000)
             result = inspect_page(page)
